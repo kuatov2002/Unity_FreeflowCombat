@@ -1,29 +1,21 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
-public class EnemyBase : MonoBehaviour
+public class EnemyBase : MonoBehaviour, IDamageable, IKnockable
 {
-
     [SerializeField] private GameObject hitVfx;
-    [SerializeField] private GameObject activeTargetObject;
-
-    // Start is called before the first frame update
-    void Start()
-    {
-        ActiveTarget(false);
-    }
-
   
-    public void SpawnHitVfx(Vector3 Pos_)
+    public void SpawnHitVfx(Vector3 pos)
     {
-        Instantiate(hitVfx, Pos_, Quaternion.identity);
+        Instantiate(hitVfx, pos, Quaternion.identity);
+    }
+    
+    public void TakeDamage(float damage)
+    {
+        SpawnHitVfx(transform.position);
     }
 
-    public void ActiveTarget(bool bool_)
+    public void TakeKnock(Vector3 force)
     {
-        activeTargetObject.SetActive(bool_);
+        GetComponent<Rigidbody>().AddForce(force, ForceMode.Impulse);
     }
-
-
 }

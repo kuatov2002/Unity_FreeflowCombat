@@ -1,10 +1,9 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
 using StarterAssets;
 
-public class PlayerControl : MonoBehaviour
+public class PlayerControl : MonoBehaviour, IDamageable
 {
     [Space]
     [Header("Player")]
@@ -20,7 +19,6 @@ public class PlayerControl : MonoBehaviour
     [SerializeField] private float airknockbackForce = 10f; 
     [SerializeField] private float attackRange = 1f;
     [SerializeField] private float reachTime = 0.3f;
-    [SerializeField] private LayerMask enemyLayer;
     bool isAttacking = false;
 
     [Space]
@@ -95,8 +93,11 @@ public class PlayerControl : MonoBehaviour
             return;
         }
 
-        thirdPersonController.canMove = false;
-        RandomAttackAnim(attackState);
+        if (thirdPersonController)
+        {
+            thirdPersonController.canMove = false;
+            RandomAttackAnim(attackState);
+        }
     }
 
     private void RandomAttackAnim(int attackState)
@@ -194,32 +195,32 @@ public class PlayerControl : MonoBehaviour
         anim.SetBool("mmakick", false);
         anim.SetBool("heavyAttack1", false);
         anim.SetBool("heavyAttack2", false);
-        thirdPersonController.canMove = true;
+        if (thirdPersonController) thirdPersonController.canMove = true;
         isAttacking = false;
     }
 
     public void PerformAttack() // Animation Event ---- for Attacking Targets
     {
-        Collider[] hitEnemies = Physics.OverlapSphere(attackPos.position, attackRange, enemyLayer);
+        Collider[] hitEnemies = Physics.OverlapSphere(attackPos.position, attackRange);
         bool anyHit = false;
 
         foreach (Collider enemy in hitEnemies)
         {
-            if (enemy == null) continue;
-            Rigidbody enemyRb = enemy.GetComponent<Rigidbody>();
-            EnemyBase enemyBase = enemy.GetComponent<EnemyBase>();
-            if (enemyRb != null)
+            if (enemy == GetComponent<Collider>() || enemy == null) continue;
+            IKnockable knockable = enemy.GetComponent<IKnockable>();
+            IDamageable damageable = enemy.GetComponent<IDamageable>();
+            if (knockable != null)
             {
                 Vector3 knockbackDirection = enemy.transform.position - transform.position;
                 knockbackDirection.y = 0f;
                 Vector3 finalKnock = knockbackDirection.normalized * knockbackForce + Vector3.up * airknockbackForce;
-                enemyRb.AddForce(finalKnock, ForceMode.Impulse);
+                knockable.TakeKnock(finalKnock);
                 anyHit = true;
             }
 
-            if (enemyBase != null)
+            if (damageable != null)
             {
-                enemyBase.SpawnHitVfx(enemyBase.transform.position);
+                damageable.TakeDamage(5f);
                 anyHit = true;
             }
 
@@ -333,6 +334,11 @@ public class PlayerControl : MonoBehaviour
     }
     #endregion
 
+    public void TakeDamage(float damage)
+    {
+        Debug.Log($"{gameObject.name} получил {damage} урона");
+    }
+    
     void OnDrawGizmosSelected()
     {
         if (attackPos == null) return;
