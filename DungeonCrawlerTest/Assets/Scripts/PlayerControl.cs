@@ -14,7 +14,6 @@ public class PlayerControl : MonoBehaviour
  
     [Space]
     [Header("Combat")]
-    public Transform target;
     [SerializeField] private Transform attackPos;
     [Tooltip("Offset Stoping Distance")][SerializeField] private float quickAttackDeltaDistance;
     [Tooltip("Offset Stoping Distance")][SerializeField] private float heavyAttackDeltaDistance;
@@ -59,19 +58,6 @@ public class PlayerControl : MonoBehaviour
         HandleInput();
     }
 
-    private void FixedUpdate()
-    {
-        if(target == null)
-        {
-            return;
-        }
-
-        if((Vector3.Distance(transform.position, target.position) >= TargetDetectionControl.instance.detectionRange))
-        {
-            NoTarget();
-        }
-    }
-
     void HandleInput()
     {
         if (Input.GetMouseButtonDown(0))
@@ -103,24 +89,8 @@ public class PlayerControl : MonoBehaviour
         {
             return;
         }
-
-        // Если текущая цель за спиной — попробуем выбрать нормальную цель впереди
-        if (target != null && !IsInFront(target.position, enemyDetectAngle))
-        {
-            Transform newT = SelectBestTargetInFront(enemyDetectAngle);
-            if (newT != null)
-            {
-                ChangeTarget(newT);
-            }
-            else
-            {
-                // оставляем target = null чтобы не бить по заднему врагу
-                ChangeTarget(null);
-            }
-        }
-
+        
         thirdPersonController.canMove = false;
-        TargetDetectionControl.instance.canChangeTarget = false;
         RandomAttackAnim(attackState);
     }
 
@@ -152,27 +122,27 @@ public class PlayerControl : MonoBehaviour
         switch (attackIndex)
         {
             case 1: //punch
-                {
-                    Vector3 facePoint = (target != null && IsInFront(target.position, enemyDetectAngle)) ? target.position : fallbackPoint;
-                    MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "punch");
-                    isAttacking = true;
-                }
+            {
+                Vector3 facePoint = fallbackPoint;
+                MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "punch");
+                isAttacking = true;
+            }
                 break;
 
             case 2: //kick
-                {
-                    Vector3 facePoint = (target != null && IsInFront(target.position, enemyDetectAngle)) ? target.position : fallbackPoint;
-                    MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "kick");
-                    isAttacking = true;
-                }
+            {
+                Vector3 facePoint = fallbackPoint;
+                MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "kick");
+                isAttacking = true;
+            }
                 break;
 
             case 3: //mmakick
-                {
-                    Vector3 facePoint = (target != null && IsInFront(target.position, enemyDetectAngle)) ? target.position : fallbackPoint;
-                    MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "mmakick");
-                    isAttacking = true;
-                }
+            {
+                Vector3 facePoint = fallbackPoint;
+                MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "mmakick");
+                isAttacking = true;
+            }
                 break;
         }
     }
@@ -186,7 +156,7 @@ public class PlayerControl : MonoBehaviour
         }
 
         Vector3 fallbackPoint = transform.position + transform.forward * (heavyAttackDeltaDistance + 0.5f);
-        Vector3 facePoint = (target != null && IsInFront(target.position, enemyDetectAngle)) ? target.position : fallbackPoint;
+        Vector3 facePoint = fallbackPoint;
 
         switch (attackIndex)
         {
@@ -195,7 +165,7 @@ public class PlayerControl : MonoBehaviour
                 FaceThis(facePoint);
                 anim.SetBool("heavyAttack1", true);
                 isAttacking = true;
-                _forwardDistance = 2.5f;
+                _forwardDistance = 3f;
                 _moveDuration = 0.25f;
             }
                 break;
@@ -220,7 +190,6 @@ public class PlayerControl : MonoBehaviour
         anim.SetBool("heavyAttack1", false);
         anim.SetBool("heavyAttack2", false);
         thirdPersonController.canMove = true;
-        TargetDetectionControl.instance.canChangeTarget = true;
         isAttacking = false;
     }
 
@@ -280,58 +249,6 @@ public class PlayerControl : MonoBehaviour
         animatorPauseCoroutine = null;
     }
 
-    public void ChangeTarget(Transform target_)
-    {
-        // отключаем старую отметку
-        if (currentTarget != null)
-        {
-            try { currentTarget.ActiveTarget(false); } catch { }
-        }
-
-        if (target_ == null)
-        {
-            // явно очищаем цель
-            target = null;
-            currentTarget = null;
-            oldTarget = null;
-            return;
-        }
-
-        // Если цель не в передней зоне — попробуем найти лучшую спереди
-        if (!IsInFront(target_.position, enemyDetectAngle))
-        {
-            Transform best = SelectBestTargetInFront(enemyDetectAngle);
-            if (best != null)
-            {
-                target_ = best;
-            }
-            else
-            {
-                // нет подходящей цели впереди — не назначаем цель
-                target = null;
-                currentTarget = null;
-                oldTarget = null;
-                return;
-            }
-        }
-
-        target = target_;
-        oldTarget = target_.GetComponent<EnemyBase>();
-        currentTarget = target_.GetComponent<EnemyBase>();
-        if (currentTarget != null) currentTarget.ActiveTarget(true);
-    }
-
-    private void NoTarget() // When player gets out of range of current Target
-    {
-        if (currentTarget != null)
-        {
-            currentTarget.ActiveTarget(false);
-        }
-        currentTarget = null;
-        oldTarget = null;
-        target = null;
-    }
-
     #endregion
 
 
@@ -375,54 +292,6 @@ public class PlayerControl : MonoBehaviour
     }
     #endregion
 
-    #region Target selection helpers
-
-    private bool IsInFront(Vector3 worldPos, float halfAngleDeg)
-    {
-        Vector3 dir = (worldPos - transform.position).normalized;
-        float dot = Vector3.Dot(transform.forward, dir);
-        float cosThreshold = Mathf.Cos(halfAngleDeg * Mathf.Deg2Rad);
-        return dot >= cosThreshold;
-    }
-
-    private Transform SelectBestTargetInFront(float halfAngleDeg)
-    {
-        float searchRadius = maxTargetSearchDistance;
-        if (TargetDetectionControl.instance != null)
-        {
-            searchRadius = TargetDetectionControl.instance.detectionRange;
-        }
-
-        Collider[] hits = Physics.OverlapSphere(transform.position, searchRadius, enemyLayer);
-        Transform best = null;
-        float bestDist = float.MaxValue;
-        float cosThreshold = Mathf.Cos(halfAngleDeg * Mathf.Deg2Rad);
-
-        foreach (Collider c in hits)
-        {
-            if (c == null) continue;
-            Vector3 dir = (c.transform.position - transform.position).normalized;
-            float dot = Vector3.Dot(transform.forward, dir);
-            if (dot < cosThreshold) continue; // не впереди
-
-            float d = Vector3.SqrMagnitude(c.transform.position - transform.position);
-            if (d < bestDist)
-            {
-                bestDist = d;
-                best = c.transform;
-            }
-        }
-
-        if (debug && best != null)
-        {
-            Debug.Log("Selected best front target: " + best.name);
-        }
-
-        return best;
-    }
-
-    #endregion
-
     void OnDrawGizmosSelected()
     {
         if (attackPos == null) return;
@@ -430,10 +299,10 @@ public class PlayerControl : MonoBehaviour
         Gizmos.DrawWireSphere(attackPos.position, attackRange); // Visualize the attack range
 
         // Отобразим конус обнаружения (приблизительно)
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
         UnityEditor.Handles.color = new Color(0, 1, 0, 0.1f);
         UnityEditor.Handles.DrawSolidArc(transform.position, Vector3.up, transform.forward, enemyDetectAngle, maxTargetSearchDistance);
         UnityEditor.Handles.DrawSolidArc(transform.position, Vector3.up, transform.forward, -enemyDetectAngle, maxTargetSearchDistance);
-        #endif
+#endif
     }
 }
