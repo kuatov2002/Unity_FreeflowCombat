@@ -7,11 +7,10 @@ using StarterAssets;
 public class PlayerControl : MonoBehaviour
 {
     [Space]
-    [Header("Components")]
+    [Header("Player")]
     [SerializeField] private Animator anim;
     [SerializeField] private ThirdPersonController thirdPersonController;
-   // [SerializeField] private GameControl gameControl;
- 
+
     [Space]
     [Header("Combat")]
     [SerializeField] private Transform attackPos;
@@ -37,18 +36,24 @@ public class PlayerControl : MonoBehaviour
     [SerializeField] private float hitPauseDuration = 0.08f;
 
     [Space]
+    [Header("Enemy target magnet")]
+    [Tooltip("На сколько секунд enemyTarget остаётся зафиксированным после попадания")]
+    [SerializeField] private float enemyTargetDuration = 1f;
+
+    [Space]
     [Header("Debug")]
     [SerializeField] private bool debug;
 
-    private EnemyBase oldTarget;
     private EnemyBase currentTarget;
+    private Transform enemyTarget;
 
-    // coroutine reference to avoid overlapping pauses
+    // coroutine references
     private Coroutine animatorPauseCoroutine = null;
-
+    private Coroutine clearEnemyTargetCoroutine = null;
 
     private float _forwardDistance;
     private float _moveDuration;
+
     void Start()
     {
     }
@@ -89,7 +94,7 @@ public class PlayerControl : MonoBehaviour
         {
             return;
         }
-        
+
         thirdPersonController.canMove = false;
         RandomAttackAnim(attackState);
     }
@@ -117,7 +122,7 @@ public class PlayerControl : MonoBehaviour
         }
 
         // fallbackPoint — вперёд от игрока
-        Vector3 fallbackPoint = transform.position + transform.forward * (quickAttackDeltaDistance + 0.5f);
+        Vector3 fallbackPoint = transform.position + transform.forward * (quickAttackDeltaDistance + 1f);
 
         switch (attackIndex)
         {
@@ -166,7 +171,7 @@ public class PlayerControl : MonoBehaviour
                 anim.SetBool("heavyAttack1", true);
                 isAttacking = true;
                 _forwardDistance = 3f;
-                _moveDuration = 0.25f;
+                _moveDuration = 0.6f;
             }
                 break;
 
@@ -206,7 +211,6 @@ public class PlayerControl : MonoBehaviour
             if (enemyRb != null)
             {
                 Vector3 knockbackDirection = enemy.transform.position - transform.position;
-                // если хотим, чтобы вертикальная составляющая была фиксирована:
                 knockbackDirection.y = 0f;
                 Vector3 finalKnock = knockbackDirection.normalized * knockbackForce + Vector3.up * airknockbackForce;
                 enemyRb.AddForce(finalKnock, ForceMode.Impulse);
@@ -218,6 +222,12 @@ public class PlayerControl : MonoBehaviour
                 enemyBase.SpawnHitVfx(enemyBase.transform.position);
                 anyHit = true;
             }
+
+            // Если задели врага — делаем его трансформ текущей целью-«магнитом» на указанную длительность
+            if (enemy != null)
+            {
+                SetEnemyTarget(enemy.transform);
+            }
         }
 
         // Если задели кого-то — делаем небольшую паузу в аниматоре, чтобы усилить эффект удара
@@ -225,6 +235,24 @@ public class PlayerControl : MonoBehaviour
         {
             TryPauseAnimator();
         }
+    }
+
+    // Устанавливает enemyTarget и запускает таймер очистки
+    private void SetEnemyTarget(Transform t)
+    {
+        enemyTarget = t;
+        if (clearEnemyTargetCoroutine != null)
+        {
+            StopCoroutine(clearEnemyTargetCoroutine);
+        }
+        clearEnemyTargetCoroutine = StartCoroutine(ClearEnemyTargetRoutine());
+    }
+
+    private IEnumerator ClearEnemyTargetRoutine()
+    {
+        yield return new WaitForSeconds(enemyTargetDuration);
+        enemyTarget = null;
+        clearEnemyTargetCoroutine = null;
     }
 
     // Запускает/перезапускает корутину паузы аниматора
@@ -255,17 +283,29 @@ public class PlayerControl : MonoBehaviour
     #region MoveTowards, Target Offset and FaceThis
     public void MoveTowardsTarget(Vector3 target_, float deltaDistance, string animationName_)
     {
+        // Если есть enemyTarget — используем его позицию как цель (магнит)
+        Vector3 effectiveTarget = (enemyTarget != null) ? enemyTarget.position : target_;
+
         PerformAttackAnimation(animationName_);
-        FaceThis(target_);
-        Vector3 finalPos = TargetOffset(target_, deltaDistance);
-        finalPos.y = 0;
+        FaceThis(effectiveTarget);
+        Vector3 finalPos = TargetOffset(effectiveTarget, deltaDistance);
+        finalPos.y = transform.position.y; // сохраняем высоту игрока
         transform.DOMove(finalPos, reachTime);
     }
 
     // Замените старый метод GetClose() этим вариантом:
     public void GetClose() // Animation Event ---- for Moving Close to Target
     {
-        Vector3 finalPos = transform.position + transform.forward * _forwardDistance;
+        Vector3 finalPos;
+        if (enemyTarget != null)
+        {
+            // "магнитимся" к enemyTarget: сохраняем _forwardDistance как расстояние-офсет
+            finalPos = TargetOffset(enemyTarget.position, 1f);
+        }
+        else
+        {
+            finalPos = transform.position + transform.forward * _forwardDistance;
+        }
         // Сохраняем текущую высоту (или можно принудительно установить 0)
         finalPos.y = transform.position.y;
         transform.DOMove(finalPos, _moveDuration);
@@ -278,6 +318,7 @@ public class PlayerControl : MonoBehaviour
 
     public Vector3 TargetOffset(Vector3 target, float deltaDistance)
     {
+        // Возвращаем точку на линии от target к игроку, сдвинутую на deltaDistance
         Vector3 position = target;
         return Vector3.MoveTowards(position, transform.position, deltaDistance);
     }
