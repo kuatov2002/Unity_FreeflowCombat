@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using DG.Tweening;
 using StarterAssets;
+
 public class PlayerControl : MonoBehaviour
 {
     [Space]
@@ -28,13 +29,13 @@ public class PlayerControl : MonoBehaviour
     [Header("Debug")]
     [SerializeField] private bool debug;
 
-    // Start is called before the first frame update
+    private EnemyBase oldTarget;
+    private EnemyBase currentTarget;
+
     void Start()
     {
-       
     }
 
-    // Update is called once per frame
     void Update()
     {
         HandleInput();
@@ -74,11 +75,9 @@ public class PlayerControl : MonoBehaviour
         {
             Attack(1);
         }
-
     }
 
     #region Attack, PerformAttack, Reset Attack, Change Target
-  
 
     public void Attack(int attackState)
     {
@@ -90,28 +89,20 @@ public class PlayerControl : MonoBehaviour
         thirdPersonController.canMove = false;
         TargetDetectionControl.instance.canChangeTarget = false;
         RandomAttackAnim(attackState);
-       
     }
 
     private void RandomAttackAnim(int attackState)
     {
-        
-
         switch (attackState) 
         {
             case 0: //Quick Attack
-
                 QuickAttack();
                 break;
 
             case 1:
                 HeavyAttack();
                 break;
-
         }
-
-
-       
     }
 
     void QuickAttack()
@@ -122,54 +113,33 @@ public class PlayerControl : MonoBehaviour
             Debug.Log(attackIndex + " attack index");
         }
 
+        // вычислим fallbackPoint на случай, если target == null
+        Vector3 fallbackPoint = transform.position + transform.forward * (quickAttackDeltaDistance + 0.5f);
+
         switch (attackIndex)
         {
             case 1: //punch
-
-                if (target != null)
                 {
-                    MoveTowardsTarget(target.position, quickAttackDeltaDistance, "punch");
+                    Vector3 facePoint = (target != null) ? target.position : fallbackPoint;
+                    MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "punch");
                     isAttacking = true;
                 }
-                else
-                {
-                    thirdPersonController.canMove = true;
-                    TargetDetectionControl.instance.canChangeTarget = true;
-                }
-
                 break;
 
             case 2: //kick
-
-                if (target != null)
                 {
-                    MoveTowardsTarget(target.position, quickAttackDeltaDistance, "kick");
+                    Vector3 facePoint = (target != null) ? target.position : fallbackPoint;
+                    MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "kick");
                     isAttacking = true;
                 }
-                else
-                {
-                    thirdPersonController.canMove = true;
-                    TargetDetectionControl.instance.canChangeTarget = true;
-                }
-                   
-
                 break;
 
             case 3: //mmakick
-
-                if (target != null)
                 {
-                    MoveTowardsTarget(target.position, quickAttackDeltaDistance, "mmakick");
-
+                    Vector3 facePoint = (target != null) ? target.position : fallbackPoint;
+                    MoveTowardsTarget(facePoint, quickAttackDeltaDistance, "mmakick");
                     isAttacking = true;
                 }
-                else
-                {
-                    thirdPersonController.canMove = true;
-                    TargetDetectionControl.instance.canChangeTarget = true;
-                }
-               
-
                 break;
         }
     }
@@ -177,48 +147,30 @@ public class PlayerControl : MonoBehaviour
     void HeavyAttack()
     {
         int attackIndex = Random.Range(1, 3);
-        //int attackIndex = 2;
         if (debug)
         {
             Debug.Log(attackIndex + " attack index");
         }
 
+        Vector3 fallbackPoint = transform.position + transform.forward * (heavyAttackDeltaDistance + 0.5f);
+        Vector3 facePoint = (target != null) ? target.position : fallbackPoint;
+
         switch (attackIndex)
         {
             case 1: //heavyAttack1
-
-                if (target != null)
                 {
-                    //MoveTowardsTarget(target.position, kickDeltaDistance, "heavyAttack1");
-                    FaceThis(target.position);
+                    FaceThis(facePoint);
                     anim.SetBool("heavyAttack1", true);
                     isAttacking = true;
-                  
                 }
-                else
-                {
-                    TargetDetectionControl.instance.canChangeTarget = true;
-                    thirdPersonController.canMove = true;
-                }
-
-
                 break;
 
             case 2: //heavyAttack2
-
-                if (target != null)
                 {
-                    //MoveTowardsTarget(target.position, kickDeltaDistance, "heavyAttack2");
-                    FaceThis(target.position);
+                    FaceThis(facePoint);
                     anim.SetBool("heavyAttack2", true);
                     isAttacking = true;
                 }
-                else
-                {
-                    thirdPersonController.canMove = true;
-                    TargetDetectionControl.instance.canChangeTarget = true;
-                }
-
                 break;
         }
     }
@@ -237,49 +189,52 @@ public class PlayerControl : MonoBehaviour
 
     public void PerformAttack() // Animation Event ---- for Attacking Targets
     {
-        // Assuming we have a melee attack with a short range
-       
         Collider[] hitEnemies = Physics.OverlapSphere(attackPos.position, attackRange, enemyLayer);
 
         foreach (Collider enemy in hitEnemies)
         {
+            if (enemy == null) continue;
             Rigidbody enemyRb = enemy.GetComponent<Rigidbody>();
             EnemyBase enemyBase = enemy.GetComponent<EnemyBase>();
             if (enemyRb != null)
             {
-                // Calculate knockback direction
                 Vector3 knockbackDirection = enemy.transform.position - transform.position;
-                knockbackDirection.y = airknockbackForce; // Keep the knockback horizontal
+                // если хотим, чтобы вертикальная составляющая была фиксирована:
+                knockbackDirection.y = 0f;
+                Vector3 finalKnock = knockbackDirection.normalized * knockbackForce + Vector3.up * airknockbackForce;
+                enemyRb.AddForce(finalKnock, ForceMode.Impulse);
+            }
 
-                // Apply force to the enemy
-                enemyRb.AddForce(knockbackDirection.normalized * knockbackForce, ForceMode.Impulse);
+            if (enemyBase != null)
+            {
                 enemyBase.SpawnHitVfx(enemyBase.transform.position);
             }
         }
     }
 
-    private EnemyBase oldTarget;
-    private EnemyBase currentTarget;
     public void ChangeTarget(Transform target_)
     {
-        
-        if(target != null)
+        if (target != null && oldTarget != null)
         {
-            //oldTarget = target_.GetComponent<EnemyBase>(); //clear old target
-            oldTarget.ActiveTarget(false);
+            try { oldTarget.ActiveTarget(false); } catch { }
         }
-       
+
         target = target_;
 
-        oldTarget = target_.GetComponent<EnemyBase>(); //set current target
-        currentTarget = target_.GetComponent<EnemyBase>();
-        currentTarget.ActiveTarget(true);
-
+        if (target_ != null)
+        {
+            oldTarget = target_.GetComponent<EnemyBase>(); //set current target
+            currentTarget = target_.GetComponent<EnemyBase>();
+            if (currentTarget != null) currentTarget.ActiveTarget(true);
+        }
     }
 
     private void NoTarget() // When player gets out of range of current Target
     {
-        currentTarget.ActiveTarget(false);
+        if (currentTarget != null)
+        {
+            currentTarget.ActiveTarget(false);
+        }
         currentTarget = null;
         oldTarget = null;
         target = null;
@@ -291,13 +246,14 @@ public class PlayerControl : MonoBehaviour
     #region MoveTowards, Target Offset and FaceThis
     public void MoveTowardsTarget(Vector3 target_, float deltaDistance, string animationName_)
     {
-
         PerformAttackAnimation(animationName_);
+
+        // Если цель прямо подана как позиция, просто повернуть на неё; если null - уже обработано раньше
         FaceThis(target_);
+
         Vector3 finalPos = TargetOffset(target_, deltaDistance);
         finalPos.y = 0;
         transform.DOMove(finalPos, reachTime);
-
     }
 
     public void GetClose() // Animation Event ---- for Moving Close to Target
@@ -305,7 +261,10 @@ public class PlayerControl : MonoBehaviour
         Vector3 getCloseTarget;
         if (target == null)
         {
-            getCloseTarget = oldTarget.transform.position;
+            if (oldTarget != null)
+                getCloseTarget = oldTarget.transform.position;
+            else
+                getCloseTarget = transform.position + transform.forward * 1.4f;
         }
         else
         {
@@ -324,8 +283,7 @@ public class PlayerControl : MonoBehaviour
 
     public Vector3 TargetOffset(Vector3 target, float deltaDistance)
     {
-        Vector3 position;
-        position = target;
+        Vector3 position = target;
         return Vector3.MoveTowards(position, transform.position, deltaDistance);
     }
 
@@ -341,6 +299,7 @@ public class PlayerControl : MonoBehaviour
 
     void OnDrawGizmosSelected()
     {
+        if (attackPos == null) return;
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(attackPos.position, attackRange); // Visualize the attack range
     }
