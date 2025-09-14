@@ -47,6 +47,9 @@ public class PlayerControl : MonoBehaviour
     // coroutine reference to avoid overlapping pauses
     private Coroutine animatorPauseCoroutine = null;
 
+
+    private float _forwardDistance;
+    private float _moveDuration;
     void Start()
     {
     }
@@ -188,19 +191,23 @@ public class PlayerControl : MonoBehaviour
         switch (attackIndex)
         {
             case 1: //heavyAttack1
-                {
-                    FaceThis(facePoint);
-                    anim.SetBool("heavyAttack1", true);
-                    isAttacking = true;
-                }
+            {
+                FaceThis(facePoint);
+                anim.SetBool("heavyAttack1", true);
+                isAttacking = true;
+                _forwardDistance = 2.5f;
+                _moveDuration = 0.25f;
+            }
                 break;
 
             case 2: //heavyAttack2
-                {
-                    FaceThis(facePoint);
-                    anim.SetBool("heavyAttack2", true);
-                    isAttacking = true;
-                }
+            {
+                FaceThis(facePoint);
+                anim.SetBool("heavyAttack2", true);
+                isAttacking = true;
+                _forwardDistance = 1.2f;
+                _moveDuration = 0.2f;
+            } 
                 break;
         }
     }
@@ -338,24 +345,13 @@ public class PlayerControl : MonoBehaviour
         transform.DOMove(finalPos, reachTime);
     }
 
+    // Замените старый метод GetClose() этим вариантом:
     public void GetClose() // Animation Event ---- for Moving Close to Target
     {
-        Vector3 getCloseTarget;
-        if (target == null)
-        {
-            if (oldTarget != null)
-                getCloseTarget = oldTarget.transform.position;
-            else
-                getCloseTarget = transform.position + transform.forward * 1.4f;
-        }
-        else
-        {
-            getCloseTarget = target.position;
-        }
-        FaceThis(getCloseTarget);
-        Vector3 finalPos = TargetOffset(getCloseTarget, 1.4f);
-        finalPos.y = 0;
-        transform.DOMove(finalPos, 0.2f);
+        Vector3 finalPos = transform.position + transform.forward * _forwardDistance;
+        // Сохраняем текущую высоту (или можно принудительно установить 0)
+        finalPos.y = transform.position.y;
+        transform.DOMove(finalPos, _moveDuration);
     }
 
     void PerformAttackAnimation(string animationName_)
