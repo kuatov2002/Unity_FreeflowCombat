@@ -33,11 +33,19 @@ public class PlayerControl : MonoBehaviour
     [SerializeField] private float maxTargetSearchDistance = 10f;
 
     [Space]
+    [Header("Hit Pause (Animator)")]
+    [Tooltip("На сколько секунд при попадании аниматор будет на паузе (используется WaitForSecondsRealtime).")]
+    [SerializeField] private float hitPauseDuration = 0.08f;
+
+    [Space]
     [Header("Debug")]
     [SerializeField] private bool debug;
 
     private EnemyBase oldTarget;
     private EnemyBase currentTarget;
+
+    // coroutine reference to avoid overlapping pauses
+    private Coroutine animatorPauseCoroutine = null;
 
     void Start()
     {
@@ -212,6 +220,7 @@ public class PlayerControl : MonoBehaviour
     public void PerformAttack() // Animation Event ---- for Attacking Targets
     {
         Collider[] hitEnemies = Physics.OverlapSphere(attackPos.position, attackRange, enemyLayer);
+        bool anyHit = false;
 
         foreach (Collider enemy in hitEnemies)
         {
@@ -225,13 +234,43 @@ public class PlayerControl : MonoBehaviour
                 knockbackDirection.y = 0f;
                 Vector3 finalKnock = knockbackDirection.normalized * knockbackForce + Vector3.up * airknockbackForce;
                 enemyRb.AddForce(finalKnock, ForceMode.Impulse);
+                anyHit = true;
             }
 
             if (enemyBase != null)
             {
                 enemyBase.SpawnHitVfx(enemyBase.transform.position);
+                anyHit = true;
             }
         }
+
+        // Если задели кого-то — делаем небольшую паузу в аниматоре, чтобы усилить эффект удара
+        if (anyHit)
+        {
+            TryPauseAnimator();
+        }
+    }
+
+    // Запускает/перезапускает корутину паузы аниматора
+    private void TryPauseAnimator()
+    {
+        if (anim == null) return;
+
+        if (animatorPauseCoroutine != null)
+        {
+            StopCoroutine(animatorPauseCoroutine);
+        }
+        animatorPauseCoroutine = StartCoroutine(AnimatorPauseRoutine());
+    }
+
+    private IEnumerator AnimatorPauseRoutine()
+    {
+        float prevSpeed = anim.speed;
+        anim.speed = 0f;
+        // используем реальное время, чтобы пауза работала даже при изменении Time.timeScale
+        yield return new WaitForSecondsRealtime(hitPauseDuration);
+        anim.speed = prevSpeed;
+        animatorPauseCoroutine = null;
     }
 
     public void ChangeTarget(Transform target_)

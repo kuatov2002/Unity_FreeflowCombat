@@ -10957,6 +10957,9 @@ MonoBehaviour:
   enemyLayer:
     serializedVersion: 2
     m_Bits: 128
+  enemyDetectAngle: 80
+  maxTargetSearchDistance: 10
+  hitPauseDuration: 0.2
   debug: 1
 --- !u!4 &8966069946718498390
 Transform:
